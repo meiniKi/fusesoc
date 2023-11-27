@@ -9,6 +9,7 @@ import os
 import pathlib
 import shutil
 from filecmp import cmp
+from importlib import import_module
 
 from fusesoc import utils
 from fusesoc.capi2.coreparser import Core2Parser
@@ -89,6 +90,17 @@ class Edalizer:
         """Get a list of all cores found by fusesoc"""
         return self.core_manager.db.find()
 
+    def apply_filters(self):
+        filters = self.edam["filters"]
+        for f in filters:
+            try:
+                filter_class = getattr(
+                    import_module(f"fusesoc.filter.{f}"), f.capitalize()
+                )
+                self.edam = filter_class().run(self.edam, self.work_root)
+            except ModuleNotFoundError:
+                logger.warning(f"Ignoring unknown EDAM filter '{f}'")
+
     def run(self):
         """Run all steps to create a EDAM file"""
 
@@ -104,6 +116,8 @@ class Edalizer:
 
         # Create EDA API file contents
         self.create_edam()
+
+        self.apply_filters()
 
         return self.edam
 
@@ -223,6 +237,9 @@ class Edalizer:
                     self.flags["tool"]: core.get_tool_options(_flags)
                 }
 
+            # Extract EDAM filters
+            snippet["filters"] = core.get_filters(_flags)
+
             # Extract flow options
             snippet["flow_options"] = core.get_flow_options(_flags)
 
@@ -284,6 +301,7 @@ class Edalizer:
             "version": "0.2.1",
             "dependencies": {},
             "files": [],
+            "filters": [],
             "hooks": {},
             "name": self.system_name or top_core.name.sanitized_name,
             "parameters": {},
